@@ -202,6 +202,12 @@ tr:hover td{background:var(--bg2)}
              placeholder="Hospital number…" oninput="upd()"/>
     </div>
 
+    <!-- Study date -->
+    <div class="sec">
+      <label class="lbl" for="sd">Study date<span class="req">*</span></label>
+      <input type="date" id="sd" oninput="upd()"/>
+    </div>
+
     <!-- Modality -->
     <div class="sec">
       <p class="lbl">Modality<span class="req">*</span></p>
@@ -344,6 +350,7 @@ async function apiPost(data) {
 async function init() {
   initModGrid();
   initFilterBar();
+  document.getElementById('sd').value = new Date().toISOString().slice(0, 10);
 
   var cachedName = '';
   try { cachedName = sessionStorage.getItem('dr_name') || ''; } catch(e) {}
@@ -615,6 +622,7 @@ function upd() {
   var ok = !!(
     document.getElementById('hn').value.trim() &&
     document.getElementById('drf').value.trim() &&
+    document.getElementById('sd').value &&
     mod
   );
   document.getElementById('lbtn').className = 'log-btn' + (ok ? ' ok' : '');
@@ -624,7 +632,8 @@ function upd() {
 async function doLog() {
   var hn  = document.getElementById('hn').value.trim();
   var drf = document.getElementById('drf').value.trim();
-  if (!hn || !drf || !mod) return;
+  var sd  = document.getElementById('sd').value;
+  if (!hn || !drf || !sd || !mod) return;
 
   try { if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) ID_TOKEN = liff.getIDToken() || ID_TOKEN; } catch(e) {}
 
@@ -636,6 +645,7 @@ async function doLog() {
     reviewer      : reviewer || 'Unknown',
     doubleReadFor : drf,
     hn            : hn,
+    studyDate     : sd,
     modality      : mod,
     regions       : Array.from(SR),
     otherRegion   : SR.has('Other') ? (document.getElementById('rotxt').value.trim() || '') : '',
@@ -658,6 +668,7 @@ async function doLog() {
       document.getElementById('hn').value  = '';
       document.getElementById('drf').value = '';
       document.getElementById('so').value  = '';
+      document.getElementById('sd').value  = new Date().toISOString().slice(0, 10);
       document.getElementById('nc').textContent = '0 / 1000';
       // Clear protocol selection but keep the modality + its tabs visible
       SR.clear();
@@ -710,7 +721,7 @@ function filterRecs() {
   var filtered = allRecs.filter(function(r) {
     if (recFilter !== 'All' && r.modality !== recFilter) return false;
     if (!q) return true;
-    return [r.reviewer, r.doubleReadFor, r.hn, r.secondOpinion, r.modality, r.protocols, r.otherReg]
+    return [r.reviewer, r.doubleReadFor, r.hn, r.studyDate, r.secondOpinion, r.modality, r.protocols, r.otherReg]
       .some(function(v) { return (v || '').toString().toLowerCase().indexOf(q) !== -1; });
   });
   document.getElementById('rcount').textContent =
@@ -735,7 +746,8 @@ function renderRecs(recs) {
       '<td style="white-space:nowrap;color:var(--txt2)">' + esc(r.date) + '<br>' + esc(r.time) + '</td>' +
       '<td style="color:var(--txt2);white-space:nowrap">' + esc(r.reviewer) + '</td>' +
       '<td style="font-weight:600">' + esc(r.doubleReadFor) + '</td>' +
-      '<td>' + esc(r.hn) + '</td>' +
+      '<td><span style="font-weight:600">' + esc(r.hn) + '</span>' +
+        (r.studyDate ? '<br><span style="font-size:13px;color:var(--txt2)">' + esc(r.studyDate) + '</span>' : '') + '</td>' +
       '<td><span class="badge ' + modCls + '">' + esc(r.modality) + '</span></td>' +
       '<td><div style="display:flex;flex-wrap:wrap;gap:4px">' + (protB + orB || '—') + '</div></td>' +
       '<td style="color:var(--txt2);max-width:240px;word-break:break-word">' + (esc(r.secondOpinion) || '—') + '</td>';
