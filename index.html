@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Ask the LINE in-app browser to revalidate rather than serve a stale cached copy -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Double Read</title>
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -159,12 +163,6 @@ tr:hover td{background:var(--bg2)}
   <div class="stat">Total: <strong id="stot">—</strong></div>
 </div>
 
-<!-- ── Tabs ────────────────────────────────────────────────────────────── -->
-<div class="tabs">
-  <button class="tab on" id="tl" onclick="ST('log')">New review</button>
-  <button class="tab"    id="tr" onclick="ST('rec')">All reviews (<span id="rcn">0</span>)</button>
-</div>
-
 <!-- ════════════ LOG PANEL ════════════════════════════════════════════════ -->
 <div id="pl">
 
@@ -248,31 +246,6 @@ tr:hover td{background:var(--bg2)}
   <p id="errmsg" style="display:none;text-align:center;padding:10px;font-size:14px;color:var(--flg-txt)"></p>
 </div>
 
-<!-- ════════════ RECORDS PANEL ════════════════════════════════════════════ -->
-<div id="pr" class="hidden">
-  <div class="fltr" id="fltr"></div>
-  <div class="rec-toolbar">
-    <input type="text" id="srch" placeholder="Search reviewer, name, HN, opinion…" oninput="filterRecs()"/>
-    <span style="font-size:14px;color:var(--txt2);align-self:center" id="rcount"></span>
-  </div>
-  <div class="tbl-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Date / Time</th>
-          <th>Reviewer</th>
-          <th>Double read for</th>
-          <th>HN</th>
-          <th>Mod</th>
-          <th>Protocols</th>
-          <th>Second opinion</th>
-        </tr>
-      </thead>
-      <tbody id="rlist"></tbody>
-    </table>
-  </div>
-</div>
-
 <script>
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  CONFIG — FILL IN THESE TWO VALUES, THEN SAVE                              ║
@@ -321,14 +294,12 @@ const MODALITY_GROUPS = {
 };
 
 // ── App state ───────────────────────────────────────────────────────────────
-let allRecs    = [];
 let mod        = null;     // selected modality: 'CT' | 'MRI' | null
 let ag         = null;     // active protocol group tab
 let SR         = new Set();// selected protocol/region items
 let lineName   = '';       // from LIFF profile
 let ID_TOKEN   = '';       // LINE ID token, sent to backend for verification
 let liffLocked = false;    // true once the LINE identity locks the reviewer field
-let recFilter  = 'All';    // records modality filter
 
 // ── Backend API (fetch) ─────────────────────────────────────────────────────
 async function apiGet(action) {
@@ -349,7 +320,6 @@ async function apiPost(data) {
 // ── Init ────────────────────────────────────────────────────────────────────
 async function init() {
   initModGrid();
-  initFilterBar();
   document.getElementById('sd').value = new Date().toISOString().slice(0, 10);
 
   var cachedName = '';
@@ -375,7 +345,6 @@ async function init() {
   initLiff();
 
   await loadStats();
-  await loadRecords();
 }
 
 // ── Reviewer name + lock ──────────────────────────────────────────────────────
@@ -460,29 +429,6 @@ async function loadStats() {
     document.getElementById('swk').textContent  = s.week;
     document.getElementById('stot').textContent = s.total;
   } catch (e) {}
-}
-
-async function loadRecords() {
-  document.getElementById('rlist').innerHTML =
-    '<tr><td colspan="7" style="color:var(--txt3);text-align:center;padding:24px">Loading…</td></tr>';
-  try {
-    allRecs = await apiGet('getRecords');
-    document.getElementById('rcn').textContent = allRecs.length;
-    filterRecs();
-  } catch (e) {
-    document.getElementById('rlist').innerHTML =
-      '<tr><td colspan="7" style="color:var(--flg-txt);text-align:center;padding:24px">Failed to load: ' + e.message + '</td></tr>';
-  }
-}
-
-// ── Tab switching ─────────────────────────────────────────────────────────────
-function ST(t) {
-  var L = t === 'log';
-  document.getElementById('pl').className = L ? '' : 'hidden';
-  document.getElementById('pr').className = L ? 'hidden' : '';
-  document.getElementById('tl').className = 'tab' + (L ? ' on' : '');
-  document.getElementById('tr').className = 'tab' + (L ? '' : ' on');
-  if (!L) filterRecs();
 }
 
 // ── Modality select ───────────────────────────────────────────────────────────
@@ -590,20 +536,6 @@ function togRO() {
   rS2();
 }
 
-// Records filter bar: All + one button per modality.
-function initFilterBar() {
-  var f = document.getElementById('fltr');
-  if (!f) return;
-  f.innerHTML = '';
-  ['All'].concat(MODALITIES).forEach(function(label) {
-    var b = document.createElement('button');
-    b.className = 'fbtn' + (label === recFilter ? ' on' : '');
-    b.textContent = label;
-    b.onclick = function() { setFilter(label); };
-    f.appendChild(b);
-  });
-}
-
 // ── Form utilities ─────────────────────────────────────────────────────────────
 function updN() {
   var n = document.getElementById('so');
@@ -680,14 +612,7 @@ async function doLog() {
       fls.style.display = 'block';
       btn.textContent = '✓ Saved';
 
-      var prev = parseInt(document.getElementById('rcn').textContent, 10) || 0;
-      document.getElementById('rcn').textContent = prev + 1;
-
       loadStats();
-      apiGet('getRecords').then(function(recs) {
-        allRecs = recs;
-        document.getElementById('rcn').textContent = recs.length;
-      }).catch(function() {});
 
       setTimeout(function() {
         fls.style.display = 'none';
@@ -706,59 +631,6 @@ async function doLog() {
     err.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Save review';
   }
-}
-
-// ── Records table ──────────────────────────────────────────────────────────────
-function setFilter(f) {
-  recFilter = f;
-  var btns = document.querySelectorAll('#fltr .fbtn');
-  btns.forEach(function(b) { b.className = 'fbtn' + (b.textContent === f ? ' on' : ''); });
-  filterRecs();
-}
-
-function filterRecs() {
-  var q = (document.getElementById('srch') ? document.getElementById('srch').value : '').toLowerCase();
-  var filtered = allRecs.filter(function(r) {
-    if (recFilter !== 'All' && r.modality !== recFilter) return false;
-    if (!q) return true;
-    return [r.reviewer, r.doubleReadFor, r.hn, r.studyDate, r.secondOpinion, r.modality, r.protocols, r.otherReg]
-      .some(function(v) { return (v || '').toString().toLowerCase().indexOf(q) !== -1; });
-  });
-  document.getElementById('rcount').textContent =
-    filtered.length + ' review' + (filtered.length !== 1 ? 's' : '');
-  renderRecs(filtered);
-}
-
-function renderRecs(recs) {
-  var tb = document.getElementById('rlist');
-  if (!recs.length) {
-    tb.innerHTML = '<tr><td colspan="7" style="color:var(--txt3);text-align:center;padding:28px;font-size:14px">No reviews found</td></tr>';
-    return;
-  }
-  tb.innerHTML = '';
-  recs.forEach(function(r) {
-    var modCls = MOD_BADGE[r.modality] || 'b-ct';
-    var prots = r.protocols ? r.protocols.split('; ').filter(Boolean) : [];
-    var protB = prots.map(function(p) { return '<span class="badge b-reg">' + esc(p) + '</span>'; }).join(' ');
-    var orB   = r.otherReg ? '<span class="badge b-reg">+ ' + esc(r.otherReg) + '</span>' : '';
-    var tr = document.createElement('tr');
-    tr.innerHTML =
-      '<td style="white-space:nowrap;color:var(--txt2)">' + esc(r.date) + '<br>' + esc(r.time) + '</td>' +
-      '<td style="color:var(--txt2);white-space:nowrap">' + esc(r.reviewer) + '</td>' +
-      '<td style="font-weight:600">' + esc(r.doubleReadFor) + '</td>' +
-      '<td><span style="font-weight:600">' + esc(r.hn) + '</span>' +
-        (r.studyDate ? '<br><span style="font-size:13px;color:var(--txt2)">' + esc(r.studyDate) + '</span>' : '') + '</td>' +
-      '<td><span class="badge ' + modCls + '">' + esc(r.modality) + '</span></td>' +
-      '<td><div style="display:flex;flex-wrap:wrap;gap:4px">' + (protB + orB || '—') + '</div></td>' +
-      '<td style="color:var(--txt2);max-width:240px;word-break:break-word">' + (esc(r.secondOpinion) || '—') + '</td>';
-    tb.appendChild(tr);
-  });
-}
-
-function esc(s) {
-  return (s == null ? '' : String(s))
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 init();
